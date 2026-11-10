@@ -1,0 +1,479 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#101a27">
+<title>RFS 航线大师 V2.0 (终极全无错版)</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{--bg:#0a111b;--panel:#111d2a;--panel2:#162536;--line:#2b4054;--text:#e9f1f8;--muted:#9bb0c3;--blue:#38a8ef;--green:#36c58b;--amber:#f2bd5b;--red:#f27676}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px system-ui,-apple-system,"Microsoft YaHei",sans-serif}
+header{height:60px;display:flex;align-items:center;gap:12px;padding:0 16px;background:#101a27;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:1200}
+.brand{font-size:18px;font-weight:800;letter-spacing:.4px}.brand b{color:var(--blue)}#dbStatus{margin-left:auto;color:var(--muted);font-size:12px}
+.app{display:grid;grid-template-columns:minmax(330px,410px) 1fr;min-height:calc(100vh - 60px)}
+aside{padding:12px;overflow:auto;max-height:calc(100vh - 60px);border-right:1px solid var(--line)}
+main{position:relative;min-height:650px;background:#09121d;overflow:hidden}
+#map{width:100%;height:calc(100vh - 60px);min-height:650px;background:#09121d}
+#mapCanvas{width:100%;height:calc(100vh - 60px);min-height:650px;display:none;background:#09121d}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px;margin-bottom:11px}
+h2{font-size:14px;margin:0 0 11px;color:#83ccff;letter-spacing:.2px}
+label{display:block;font-size:11px;color:var(--muted);margin:7px 0 4px}
+input,select,textarea{width:100%;min-width:0;padding:9px 10px;border-radius:8px;border:1px solid #354c61;background:#0b1520;color:var(--text);outline:none;font:inherit}
+input:focus,select:focus,textarea:focus{border-color:var(--blue)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+button{border:0;border-radius:8px;padding:9px 11px;background:#176da7;color:white;font-weight:650;cursor:pointer}
+button.secondary{background:#2a3c4f}button.green{background:#237b59}button.red{background:#923e45}
+button:active{transform:translateY(1px)}.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}.actions button{flex:1}
+.small{font-size:11px;color:var(--muted);line-height:1.55}.hint{font-size:11px;color:#d4b36f;line-height:1.5;margin-top:7px}
+.result{padding:8px;margin-top:6px;border:1px solid var(--line);border-radius:8px;background:#0b1520;cursor:pointer}.result:hover{border-color:var(--blue)}
+.code{color:#79caff;font-weight:800}.muted{color:var(--muted)}.route-row{display:flex;gap:8px;align-items:center;padding:8px;background:#0c1722;border:1px solid var(--line);border-radius:8px;margin:6px 0}.route-row span{flex:1;font-size:12px}.route-row button{padding:5px 8px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:7px}.stat{background:#0b1520;padding:9px;border:1px solid var(--line);border-radius:8px}.stat small{display:block;color:var(--muted);font-size:10px}.stat strong{display:block;margin-top:4px;font-size:16px}
+#output{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.65 ui-monospace,monospace;background:#09131d;padding:10px;border-radius:8px;max-height:460px;overflow:auto}
+.map-tools{position:absolute;top:12px;right:12px;z-index:900;background:#101a27ed;border:1px solid var(--line);border-radius:11px;padding:10px;width:min(260px,calc(100% - 24px));box-shadow:0 5px 24px #0006}
+.map-tools label{margin-top:0}.map-tools .small{margin-top:5px}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#142333;color:#eef5fa}.leaflet-popup-content{font-size:12px}
+.badge{display:inline-block;border:1px solid #40566a;border-radius:20px;padding:2px 7px;font-size:10px;color:#b7cad9;margin:2px}
+@media(max-width:900px){.app{display:flex;flex-direction:column}aside{max-height:none;overflow:visible;border-right:0;border-bottom:1px solid var(--line)}main{min-height:440px;height:55vh}#map,#mapCanvas{height:100%;min-height:440px}.map-tools{top:8px;right:8px}}
+</style>
+</head>
+<body>
+<header><div class="brand">RFS <b>航线大师</b> <span class="badge">V2.0 Verified</span></div><div id="dbStatus">正在初始化…</div></header>
+<div class="app">
+<aside>
+ <section class="card">
+  <h2>🌍 航段编辑器</h2>
+  <div class="grid2">
+   <div><label>出发机场 ICAO / 名称</label><input id="depInput" placeholder="例如 ZSNJ / Nanjing"></div>
+   <div><label>到达机场 ICAO / 名称</label><input id="arrInput" placeholder="例如 KLAX / Los Angeles"></div>
+  </div>
+  <div class="grid2"><div id="depResults"></div><div id="arrResults"></div></div>
+  <div class="actions"><button onclick="addLeg()">＋ 添加航段</button><button class="secondary" onclick="swapAirports()">⇄ 交换</button></div>
+  <div id="routeList" class="small" style="margin-top:9px">尚未添加航段</div>
+  <div class="actions"><button class="secondary" onclick="undoLeg()">撤销末段</button><button class="red" onclick="clearRoute()">清空航线</button></div>
+ </section>
+ <section class="card">
+  <h2>✈️ 飞机选择与推荐</h2>
+  <div class="grid2"><div><label>制造商</label><select id="maker" onchange="renderFamilies()"><option value="All">全部</option><option>Airbus</option><option>Boeing</option></select></div><div><label>系列</label><select id="family" onchange="renderAircraft()"><option value="All">全部系列</option></select></div></div>
+  <label>具体机型 / 子型号</label><select id="aircraft" onchange="showAircraft()"></select>
+  <div class="stats" style="margin-top:8px">
+   <div class="stat"><small>参考航程</small><strong id="aRange">—</strong></div>
+   <div class="stat"><small>参考巡航速度</small><strong id="aSpeed">—</strong></div>
+   <div class="stat"><small>参考油耗</small><strong id="aBurn">—</strong></div>
+   <div class="stat"><small>参考最大燃油</small><strong id="aFuel">—</strong></div>
+  </div>
+  <div class="actions"><button class="green" onclick="recommend()">⭐ 按航程/油耗推荐</button></div>
+ </section>
+ <section class="card">
+  <h2>⛽ 燃油、载荷与飞行参数</h2>
+  <div class="grid2">
+   <div><label>乘客人数</label><input id="pax" type="number" min="0" value="280"></div>
+   <div><label>货物重量 kg</label><input id="cargo" type="number" min="0" value="5000"></div>
+   <div><label>计划巡航高度 ft</label><input id="cruiseAlt" type="number" value="39000"></div>
+   <div><label>计划巡航速度 kt</label><input id="cruiseSpeed" type="number" value="470"></div>
+   <div><label>平均风分量 kt</label><input id="wind" type="number" value="0"></div>
+   <div><label>航路绕飞系数 %</label><input id="detour" type="number" value="5"></div>
+   <div><label>油耗修正 %</label><input id="burnAdj" type="number" value="0"></div>
+   <div><label>额外储备油 %</label><input id="extraReserve" type="number" value="5"></div>
+   <div><label>备降油估算 %</label><input id="alternatePct" type="number" value="5"></div>
+   <div><label>最终储备油 %</label><input id="finalReserve" type="number" value="5"></div>
+  </div>
+ </section>
+ <section class="card">
+  <h2>📋 计算与导出</h2>
+  <div class="actions"><button class="green" onclick="calculate()">计算完整计划</button><button class="secondary" onclick="copyPlan()">复制计划</button></div>
+  <div class="actions">
+    <button class="secondary" onclick="downloadTXT()">导出 TXT</button>
+    <button class="secondary" onclick="exportJSON()">导出航线 JSON</button>
+    <button class="secondary" style="background:#1e88e5;color:white" onclick="exportKML()">导出 KML 航线</button>
+  </div>
+  <div id="output" style="margin-top:10px">等待航线与参数。添加航段后点击“计算完整计划”。</div>
+ </section>
+</aside>
+<main>
+ <div id="map"></div>
+ <canvas id="mapCanvas"></canvas>
+ <div class="map-tools">
+  <label>地图与渲染模式</label>
+  <select id="mapLayer" onchange="changeLayer()">
+   <option value="googleSat">🌐 高清全景卫星 · Google</option>
+   <option value="cartoDark">🌙 暗黑夜间电子 · CARTO</option>
+   <option value="canvasOffline">⚡ 纯净矢量雷达 (100%离线免网)</option>
+  </select>
+  <div class="actions"><button class="secondary" onclick="fitRoute()">定位整条航线</button><button class="secondary" onclick="toggleFullscreen()">地图全屏</button></div>
+  <div class="small">地图支持拉伸缩放及动态视口机场标注。</div>
+ </div>
+</main>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+"use strict";
+const AIRCRAFT = [
+["Airbus","A220","A220-100",3450,445,2300,21300,135,41000],
+["Airbus","A320neo","A320neo",3500,450,2500,26700,186,39000],
+["Airbus","A330","A330-300",6350,470,6100,139000,300,41000],
+["Airbus","A350","A350-900",8100,470,5200,141000,325,43000],
+["Boeing","737NG","737-800",2935,450,2600,26000,174,41000],
+["Boeing","777","777-300ER",7370,490,7600,181000,396,43000],
+["Boeing","787","787-9",7635,470,5000,126000,290,43000]
+].map(x=>({maker:x[0],family:x[1],model:x[2],range:x[3],speed:x[4],burn:x[5],fuel:x[6],pax:x[7],alt:x[8]}));
+
+// 硬编码离线保底机场数据
+const EMBEDDED_AIRPORTS = [
+  {ident:"ZSNJ",name:"Nanjing Lukou Intl",latitude_deg:31.742,longitude_deg:118.862},
+  {ident:"ZBAA",name:"Beijing Capital Intl",latitude_deg:40.077,longitude_deg:116.597},
+  {ident:"ZSPD",name:"Shanghai Pudong Intl",latitude_deg:31.144,longitude_deg:121.805},
+  {ident:"KLAX",name:"Los Angeles Intl",latitude_deg:33.943,longitude_deg:-118.408},
+  {ident:"KJFK",name:"John F Kennedy Intl",latitude_deg:40.640,longitude_deg:-73.779}
+];
+
+let airports=[...EMBEDDED_AIRPORTS],dep=null,arr=null,legs=[],planText="";
+
+// Leaflet 地图初始化
+const map=L.map("map",{worldCopyJump:true}).setView([25,115],4);
+const leafletLayers={
+ googleSat:L.tileLayer("https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",{maxZoom:20,subdomains:['mt0','mt1','mt2','mt3'],attribution:'&copy; Google Maps'}),
+ cartoDark:L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{maxZoom:19,subdomains:'abcd',attribution:'&copy; <a href="https://carto.com/">CARTO</a>'})
+};
+let currentLeafletLayer=leafletLayers.googleSat;
+currentLeafletLayer.addTo(map);
+let routeLayer=L.layerGroup().addTo(map);
+let airportMarkersLayer=L.layerGroup().addTo(map);
+
+// Canvas 离线地图引擎初始化
+const canvas=document.getElementById("mapCanvas"),ctx=canvas.getContext("2d");
+function resizeCanvas(){
+  let p=canvas.parentElement;
+  if(p){
+    canvas.width=p.clientWidth;
+    canvas.height=p.clientHeight;
+    drawCanvasMap();
+  }
+}
+window.addEventListener("resize",()=>{if(document.getElementById("mapLayer").value==="canvasOffline")resizeCanvas();else map.invalidateSize()});
+
+function setStatus(s){document.getElementById("dbStatus").textContent=s}
+
+// 修复后的更安全 CSV 解析方法
+function parseCSV(text){
+  let lines=text.split(/\r?\n/);
+  if(!lines.length) return [];
+  let head=lines.shift().split(',').map(h=>h.trim().replace(/^"|"$/g,''));
+  let list = [];
+  for(let l of lines){
+    if(!l.trim()) continue;
+    let parts = [], inQuote = false, cur = "";
+    for(let i=0; i<l.length; i++){
+      let c = l[i];
+      if(c === '"'){ inQuote = !inQuote; }
+      else if(c === ',' && !inQuote){ parts.push(cur.trim().replace(/^"|"$/g,'')); cur = ""; }
+      else { cur += c; }
+    }
+    parts.push(cur.trim().replace(/^"|"$/g,''));
+    let o = {};
+    head.forEach((h, idx)=>{ o[h] = parts[idx] || ''; });
+    list.push(o);
+  }
+  return list;
+}
+
+async function loadAirports(){
+  setStatus(`预载：${airports.length} 个本地枢纽机场`);
+  const sources = [
+    "https://fastly.jsdelivr.net/gh/davidmegginson/ourairports-data@main/airports.csv",
+    "https://gcore.jsdelivr.net/gh/davidmegginson/ourairports-data@main/airports.csv",
+    "https://raw.githubusercontent.com/davidmegginson/ourairports-data/main/airports.csv"
+  ];
+  for(let url of sources){
+    try{
+      setStatus("正在从 CDN 同步全球机场数据库…");
+      let res = await fetch(url);
+      if(!res.ok) continue;
+      let text = await res.text();
+      let remoteAirports = parseCSV(text).filter(x => x.ident && x.latitude_deg && x.longitude_deg && x.type !== "closed");
+      if(remoteAirports.length > 0){
+        airports = remoteAirports;
+        setStatus(`已加载：${airports.length.toLocaleString()} 个全球机场`);
+        renderMapAirports();
+        break;
+      }
+    }catch(e){
+      console.warn("当前 CDN 连接受限，尝试备用源...", url);
+    }
+  }
+  renderMapAirports();
+}
+
+function renderMapAirports(){
+  airportMarkersLayer.clearLayers();
+  if(document.getElementById("mapLayer").value==="canvasOffline") return;
+  let zoom = map.getZoom();
+  let bounds = map.getBounds();
+  
+  let visibleAirports = airports.filter(a => {
+    let lat = +a.latitude_deg, lon = +a.longitude_deg;
+    return bounds.contains([lat, lon]);
+  });
+
+  let limit = zoom < 5 ? 60 : (zoom < 8 ? 180 : 400);
+  visibleAirports.slice(0, limit).forEach(a => {
+    let circle = L.circleMarker([+a.latitude_deg, +a.longitude_deg], {
+      radius: 4,
+      fillColor: "#38a8ef",
+      color: "#ffffff",
+      weight: 1.5,
+      opacity: 0.9,
+      fillOpacity: 0.8
+    }).bindPopup(`<b>${a.ident}</b><br>${a.name||""}<br><button style="margin-top:6px;padding:3px 8px;background:#176da7;color:#fff;border:0;border-radius:4px;cursor:pointer;" onclick="selectMapAirport('${a.ident}')">设为航点</button>`);
+    
+    circle.addTo(airportMarkersLayer);
+  });
+}
+
+map.on("moveend", renderMapAirports);
+
+function selectMapAirport(ident){
+  let found = airports.find(a => a.ident === ident);
+  if(!found) return;
+  if(!dep) {
+    dep = found;
+    document.getElementById("depInput").value = found.ident;
+  } else {
+    arr = found;
+    document.getElementById("arrInput").value = found.ident;
+  }
+  map.closePopup();
+}
+
+function searchAirports(q,boxId,which){
+  let box=document.getElementById(boxId);box.innerHTML="";
+  if(q.trim().length<2)return;
+  let query=q.trim().toLowerCase();
+  let found=airports.filter(a=>(a.ident||"").toLowerCase().includes(query)||(a.name||"").toLowerCase().includes(query)).slice(0,6);
+  found.forEach(a=>{
+    let d=document.createElement("div");d.className="result";
+    d.innerHTML=`<span class="code">${a.ident}</span> ${a.name}`;
+    d.onclick=()=>{
+      if(which==="dep")dep=a;else arr=a;
+      document.getElementById(which==="dep"?"depInput":"arrInput").value=a.ident;
+      box.innerHTML="";
+      if(document.getElementById("mapLayer").value==="canvasOffline") drawCanvasMap();
+      else map.setView([+a.latitude_deg,+a.longitude_deg],7);
+    };
+    box.appendChild(d);
+  });
+}
+document.getElementById("depInput").addEventListener("input",e=>searchAirports(e.target.value,"depResults","dep"));
+document.getElementById("arrInput").addEventListener("input",e=>searchAirports(e.target.value,"arrResults","arr"));
+
+function swapAirports(){[dep,arr]=[arr,dep];document.getElementById("depInput").value=dep?.ident||"";document.getElementById("arrInput").value=arr?.ident||""}
+function addLeg(){if(!dep||!arr){alert("先选择出发和到达机场。");return;}legs.push({dep,arr});dep=null;arr=null;document.getElementById("depInput").value="";document.getElementById("arrInput").value="";renderLegs();drawAllRoutes()}
+function renderLegs(){document.getElementById("routeList").innerHTML=legs.length?legs.map((l,i)=>`<div class="route-row"><span><b>${i+1}.</b> ${l.dep.ident} → ${l.arr.ident} (${Math.round(distance(l.dep,l.arr))} NM)</span><button class="red" onclick="removeLeg(${i})">×</button></div>`).join(""):"尚未添加航段"} 
+function removeLeg(i){legs.splice(i,1);renderLegs();drawAllRoutes()} 
+function undoLeg(){if(legs.length)removeLeg(legs.length-1)} 
+function clearRoute(){legs=[];renderLegs();drawAllRoutes()}  
+
+function distance(a,b){ const r=Math.PI/180, p1=+a.latitude_deg*r, p2=+b.latitude_deg*r; let h=Math.sin((+b.latitude_deg-+a.latitude_deg)*r/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin((+b.longitude_deg-+a.longitude_deg)*r/2)**2; return 3440.065*2*Math.asin(Math.sqrt(Math.min(1,h))); }  
+
+function interpolateGreatCircle(lat1, lon1, lat2, lon2, numPoints = 100) {
+  const r = Math.PI / 180;
+  let p1 = [Math.cos(lat1 * r) * Math.cos(lon1 * r), Math.cos(lat1 * r) * Math.sin(lon1 * r), Math.sin(lat1 * r)];
+  let p2 = [Math.cos(lat2 * r) * Math.cos(lon2 * r), Math.cos(lat2 * r) * Math.sin(lon2 * r), Math.sin(lat2 * r)];
+  let dot = Math.max(-1, Math.min(1, p1[0]*p2[0] + p1[1]*p2[1] + p1[2]*p2[2]));
+  let omega = Math.acos(dot);
+  if (Math.abs(omega) < 1e-6) return [[lat1, lon1]];
+  let points = [];
+  for (let i = 0; i <= numPoints; i++) {
+    let t = i / numPoints, sinO = Math.sin(omega);
+    let k1 = Math.sin((1 - t) * omega) / sinO, k2 = Math.sin(t * omega) / sinO;
+    let x = k1 * p1[0] + k2 * p2[0], y = k1 * p1[1] + k2 * p2[1], z = k1 * p1[2] + k2 * p2[2];
+    points.push([Math.atan2(z, Math.sqrt(x*x + y*y)) / r, Math.atan2(y, x) / r]);
+  }
+  return points;
+}
+
+function drawAllRoutes(){ drawLeafletRoute(); drawCanvasMap(); }  
+
+function drawLeafletRoute(){
+  routeLayer.clearLayers();
+  if(!legs.length) return;
+  legs.forEach((l)=>{
+    let p1 = [+l.dep.latitude_deg, +l.dep.longitude_deg];
+    let p2 = [+l.arr.latitude_deg, +l.arr.longitude_deg];
+    L.marker(p1).bindPopup(`<b>${l.dep.ident}</b><br>${l.dep.name||""}`).addTo(routeLayer);
+    L.marker(p2).bindPopup(`<b>${l.arr.ident}</b><br>${l.arr.name||""}`).addTo(routeLayer);
+    let gcPoints = interpolateGreatCircle(p1[0], p1[1], p2[0], p2[1], 120);
+    let segments = [[]];
+    for (let i = 0; i < gcPoints.length; i++) {
+      let current = gcPoints[i];
+      let prev = gcPoints[i - 1];
+      if (prev && Math.abs(current[1] - prev[1]) > 180) {
+        let sign = prev[1] > 0 ? 1 : -1;
+        let dLonPrev = Math.abs(prev[1] - sign * 180);
+        let dLonCurr = Math.abs(current[1] - (-sign) * 180);
+        let ratio = dLonPrev / (dLonPrev + dLonCurr || 1);
+        let midLat = prev[0] + (current[0] - prev[0]) * ratio;
+        segments[segments.length - 1].push([midLat, sign * 180]);
+        segments.push([[midLat, -sign * 180]]);
+      }
+      segments[segments.length - 1].push(current);
+    }
+    segments.forEach(seg => {
+      if(seg.length > 1) L.polyline(seg, {color: "#36b5ff", weight: 3.5, dashArray: "7 6"}).addTo(routeLayer);
+    });
+  });
+  fitRoute();
+}
+
+function drawCanvasMap(){
+  let w=canvas.width, h=canvas.height;
+  if(!w || !h) return;
+  ctx.fillStyle="#09121d";ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle="#14263b";ctx.lineWidth=1;
+  for(let lon=-180;lon<=180;lon+=30){
+    let x=(lon+180)/360*w;
+    ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();
+  }
+  for(let lat=-90;lat<=90;lat+=30){
+    let y=(90-lat)/180*h;
+    ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();
+  }
+  
+  airports.forEach(a => {
+    let px = (+a.longitude_deg + 180) / 360 * w;
+    let py = (90 - (+a.latitude_deg)) / 180 * h;
+    ctx.fillStyle = "#1e3a5f";
+    ctx.fillRect(px - 1, py - 1, 2, 2);
+  });
+
+  if(!legs.length) return;
+  legs.forEach(l=>{
+    let gc = interpolateGreatCircle(+l.dep.latitude_deg, +l.dep.longitude_deg, +l.arr.latitude_deg, +l.arr.longitude_deg);
+    ctx.beginPath();ctx.strokeStyle="#36b5ff";ctx.lineWidth=2.5;ctx.setLineDash([6,4]);
+    for(let i=0;i<gc.length;i++){
+      let cx = (gc[i][1] + 180) / 360 * w;
+      let cy = (90 - gc[i][0]) / 180 * h;
+      if(i===0) ctx.moveTo(cx,cy);
+      else {
+        if(Math.abs(gc[i][1] - gc[i-1][1]) > 180){
+          ctx.stroke();ctx.beginPath();ctx.moveTo(cx,cy);
+        } else ctx.lineTo(cx,cy);
+      }
+    }
+    ctx.stroke();ctx.setLineDash([]);
+    [[+l.dep.latitude_deg, +l.dep.longitude_deg, l.dep.ident],[+l.arr.latitude_deg, +l.arr.longitude_deg, l.arr.ident]].forEach(pt=>{
+      let px=(pt[1]+180)/360*w, py=(90-pt[0])/180*h;
+      ctx.fillStyle="#38a8ef";ctx.beginPath();ctx.arc(px,py,5,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle="#ffffff";ctx.font="11px sans-serif";ctx.fillText(pt[2],px+8,py+4);
+    });
+  });
+}
+
+function changeLayer(){
+  let val=document.getElementById("mapLayer").value;
+  let mapEl=document.getElementById("map"), canvasEl=document.getElementById("mapCanvas");
+  if(val==="canvasOffline"){
+    mapEl.style.display="none";
+    canvasEl.style.display="block";
+    resizeCanvas();
+  } else {
+    canvasEl.style.display="none";
+    mapEl.style.display="block";
+    if(currentLeafletLayer) map.removeLayer(currentLeafletLayer);
+    currentLeafletLayer=leafletLayers[val];
+    currentLeafletLayer.addTo(map);
+    map.invalidateSize();
+    renderMapAirports();
+  }
+}
+
+function fitRoute(){
+  if(!legs.length)return;
+  let pts=[];
+  legs.forEach(l=> {
+    let gc = interpolateGreatCircle(+l.dep.latitude_deg, +l.dep.longitude_deg, +l.arr.latitude_deg, +l.arr.longitude_deg, 40);
+    pts.push(...gc);
+  });
+  map.fitBounds(L.latLngBounds(pts),{padding:[45,45]});
+}
+
+function toggleFullscreen(){
+  let el=document.querySelector("main");
+  if(!document.fullscreenElement)el.requestFullscreen?.();else document.exitFullscreen?.();
+  setTimeout(()=>{map.invalidateSize();resizeCanvas();},300);
+}
+
+function renderFamilies(){let maker=document.getElementById("maker").value;let fams=[...new Set(AIRCRAFT.filter(a=>maker==="All"||a.maker===maker).map(a=>a.family))];document.getElementById("family").innerHTML='<option value="All">全部系列</option>'+fams.map(f=>`<option>${f}</option>`).join("");renderAircraft()}
+function renderAircraft(){let maker=document.getElementById("maker").value,fam=document.getElementById("family").value;let arr=AIRCRAFT.filter(a=>(maker==="All"||a.maker===maker)&&(fam==="All"||a.family===fam));document.getElementById("aircraft").innerHTML=arr.map(a=>`<option value="${a.model}">${a.maker} · ${a.model}</option>`).join("");showAircraft()}
+function selectedAircraft(){return AIRCRAFT.find(a=>a.model===document.getElementById("aircraft").value)||AIRCRAFT[0]}
+function showAircraft(){let a=selectedAircraft();document.getElementById("aRange").textContent=a.range.toLocaleString()+" NM";document.getElementById("aSpeed").textContent=a.speed+" kt";document.getElementById("aBurn").textContent=a.burn.toLocaleString()+" kg/h";document.getElementById("aFuel").textContent=a.fuel.toLocaleString()+" kg"}
+function recommend(){if(!legs.length){alert("请先添加航段！");return;}let longest=Math.max(...legs.map(l=>distance(l.dep,l.arr)));let choices=AIRCRAFT.filter(a=>a.range>=longest*1.08);if(choices.length)alert("推荐最匹配机型："+choices[0].model)}
+
+function calculate(){
+  if(!legs.length){alert("请先添加航段！");return;}
+  let ac = selectedAircraft();
+  let totalDist = legs.reduce((sum, l) => sum + distance(l.dep, l.arr), 0);
+  let detourPct = parseFloat(document.getElementById("detour").value) || 0;
+  let planDist = totalDist * (1 + detourPct / 100);
+  let spd = parseFloat(document.getElementById("cruiseSpeed").value) || ac.speed;
+  let wind = parseFloat(document.getElementById("wind").value) || 0;
+  let groundSpeed = Math.max(100, spd + wind);
+  let flightTimeHours = planDist / groundSpeed;
+  let hours = Math.floor(flightTimeHours);
+  let mins = Math.round((flightTimeHours - hours) * 60);
+
+  let tripFuel = flightTimeHours * ac.burn;
+  let reservePct = (parseFloat(document.getElementById("extraReserve").value)||0) + 
+                   (parseFloat(document.getElementById("alternatePct").value)||0) + 
+                   (parseFloat(document.getElementById("finalReserve").value)||0);
+  let totalFuel = Math.round(tripFuel * (1 + reservePct / 100));
+
+  let lines=[];
+  lines.push("RFS 航迹放行单 (OFP)");
+  lines.push("------------------------------");
+  lines.push(`机型: ${ac.maker} ${ac.model}`);
+  lines.push(`预估总航程: ${Math.round(planDist)} NM (含绕飞 ${detourPct}%)`);
+  lines.push(`预计飞行时间 (EET): ${hours}小时 ${mins}分钟`);
+  lines.push(`建议总燃油: ${totalFuel.toLocaleString()} kg`);
+  lines.push("------------------------------");
+  legs.forEach((l,i)=>{
+    lines.push(`航段 ${i+1}: ${l.dep.ident} -> ${l.arr.ident} (${Math.round(distance(l.dep,l.arr))} NM)`);
+  });
+
+  planText=lines.join("\n");
+  document.getElementById("output").textContent=planText;
+}
+
+// 动态生成机场点对点命名（如 ZSNJ-KLAX.kml）的规范 KML 文件
+function exportKML(){
+  if(!legs.length){alert("请先添加航段！");return;}
+  let firstDep = legs[0].dep.ident || "DEP";
+  let lastArr = legs[legs.length - 1].arr.ident || "ARR";
+  let fileName = `${firstDep}-${lastArr}.kml`;
+
+  let coordLines = [];
+  legs.forEach(l=>{
+    let pts=interpolateGreatCircle(+l.dep.latitude_deg,+l.dep.longitude_deg,+l.arr.latitude_deg,+l.arr.longitude_deg,100);
+    pts.forEach(p=>{ coordLines.push(`${p[1]},${p[0]},10000`); });
+  });
+
+  let kml=`<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${firstDep} to ${lastArr}</name><Placemark><LineString><coordinates>${coordLines.join('\n')}</coordinates></LineString></Placemark></Document></kml>`;
+  
+  let blob=new Blob([kml],{type:"application/vnd.google-earth.kml+xml"}),a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=fileName;
+  a.click();
+}
+
+function copyPlan(){if(!planText){alert("请先计算计划");return;}navigator.clipboard?.writeText(planText).then(()=>alert("已复制")).catch(()=>alert("无法访问剪贴板"));}
+function downloadTXT(){calculate();if(planText){let blob=new Blob([planText],{type:"text/plain"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="Plan.txt";a.click()}}
+function exportJSON(){let blob=new Blob([JSON.stringify(legs)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="Route.json";a.click()}
+
+renderFamilies();
+loadAirports();
+window.onload = function(){
+  drawCanvasMap();
+};
+</script>
+</body>
+</html>
